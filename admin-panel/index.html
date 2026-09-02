@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Byte Morphix — Admin Control Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>Admin Control Panel</h1>
+    <p>Manage every part of the Byte Morphix site from here.</p>
+    <div class="field"><label for="admin-email">Email</label><input id="admin-email" type="email" placeholder="admin@bytemorphix.com"></div>
+    <div class="field"><label for="admin-pass">Password</label><input id="admin-pass" type="password" placeholder="••••••••"></div>
+    <div class="error-text" id="loginError"></div>
+    <button class="btn btn-primary btn-block" id="loginBtn" style="margin-top:18px;">Log In</button>
+    <div class="demo-hint"><b>Demo login:</b> admin@bytemorphix.com / admin123</div>
+  </div>
+</div>
+
+<!-- ===================== APP SHELL ===================== -->
+<div class="app-shell" id="appShell">
+  <div class="mobile-topbar">
+    <button class="btn btn-ghost btn-sm" id="menuToggle">☰ Menu</button>
+    <b style="font-family:'Montserrat',sans-serif;">Admin</b>
+  </div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">Byte<span>Morphix</span> Admin</div>
+    <div class="nav-item active" data-panel="overview"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="5" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="12" width="7" height="9" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="16" width="7" height="5" rx="1" stroke="currentColor" stroke-width="1.6"/></svg>Overview</div>
+    <div class="nav-item" data-panel="content"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19V5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Site Content</div>
+    <div class="nav-item" data-panel="code"><svg viewBox="0 0 24 24" fill="none"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Code Editor</div>
+    <div class="nav-item" data-panel="leads"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 7l8 6 8-6" stroke="currentColor" stroke-width="1.6"/></svg>Leads</div>
+    <div class="nav-item" data-panel="webinar"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 9h18M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Webinar</div>
+    <div class="nav-item" data-panel="students"><svg viewBox="0 0 24 24" fill="none"><path d="M2 9l10-5 10 5-10 5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Students</div>
+    <div class="nav-item" data-panel="mentors"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Mentors</div>
+    <div class="nav-item" data-panel="employers"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Employers</div>
+    <div class="nav-item" data-panel="settings"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Settings</div>
+
+    <div class="sidebar-footer">
+      <button class="btn btn-ghost btn-block btn-sm" id="logoutBtn">Log Out</button>
+      <a class="btn btn-ghost btn-block btn-sm" style="margin-top:8px;" href="/" target="_blank">View Live Site ↗</a>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <section class="panel active" id="panel-overview">
+      <div class="main-head"><div><h2>Overview</h2><p>A snapshot of everything happening on the site right now.</p></div></div>
+      <div class="stat-grid" id="overviewStats"></div>
+      <div class="card">
+        <h3>What you can control from here</h3>
+        <p class="card-sub" style="margin-bottom:0;">Site copy and courses, the webinar event, every lead and registration, student/mentor/employer accounts and their data, mentor payment corrections, employer hiring requests — and the actual HTML/CSS/JS files behind the site, from the Code Editor tab.</p>
+      </div>
+    </section>
+
+    <!-- SITE CONTENT -->
+    <section class="panel" id="panel-content">
+      <div class="main-head"><div><h2>Site Content</h2><p>Edit the copy that renders on the live homepage — saves instantly.</p></div>
+        <button class="btn btn-primary" id="saveContentBtn">Save All Content</button>
+      </div>
+
+      <div class="card">
+        <h3>Hero Section</h3>
+        <div class="grid-2">
+          <div class="field"><label>Eyebrow text</label><input id="c-hero-eyebrow"></div>
+          <div class="field"><label>Cycling words (comma separated)</label><input id="c-hero-cyclewords"></div>
+        </div>
+        <div class="field"><label>Headline suffix (after the cycling word)</label><input id="c-hero-suffix"></div>
+        <div class="field"><label>Sub-headline</label><textarea id="c-hero-sub" rows="3"></textarea></div>
+      </div>
+
+      <div class="card">
+        <h3>"No Placement, No Fees" Section</h3>
+        <div class="field"><label>Headline</label><input id="c-usp-headline"></div>
+        <div class="field"><label>Body</label><textarea id="c-usp-body" rows="2"></textarea></div>
+        <div class="field"><label>Disclaimer</label><textarea id="c-usp-disclaimer" rows="2"></textarea></div>
+      </div>
+
+      <div class="card">
+        <h3>Courses</h3>
+        <p class="card-sub">Add, edit or remove the four course cards shown on the homepage and courses page.</p>
+        <div id="coursesEditor"></div>
+        <button class="btn btn-ghost btn-sm add-item-btn" id="addCourseBtn">+ Add Course</button>
+      </div>
+
+      <div class="card">
+        <h3>Testimonials</h3>
+        <div id="testimonialsEditor"></div>
+        <button class="btn btn-ghost btn-sm add-item-btn" id="addTestimonialBtn">+ Add Testimonial</button>
+      </div>
+    </section>
+
+    <!-- CODE EDITOR -->
+    <section class="panel" id="panel-code">
+      <div class="main-head"><div><h2>Code Editor</h2><p>Directly edit the site's HTML, CSS and JS files. Every save keeps an automatic backup.</p></div></div>
+      <div class="editor-shell">
+        <div class="file-list" id="fileList"></div>
+        <div class="editor-main">
+          <div class="editor-toolbar">
+            <b id="editorFileName">Select a file</b>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span class="editor-status" id="editorStatus"></span>
+              <button class="btn btn-primary btn-sm" id="saveFileBtn" disabled>Save File</button>
+              <button class="btn btn-danger btn-sm" id="deleteFileBtn" disabled>Delete</button>
+            </div>
+          </div>
+          <textarea id="codeTextarea" spellcheck="false" placeholder="Select a file from the left to start editing..." disabled></textarea>
+          <div class="new-file-row">
+            <input type="text" id="newFileName" placeholder="new-file.html">
+            <button class="btn btn-ghost btn-sm" id="newFileBtn">+ Create File</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADS -->
+    <section class="panel" id="panel-leads">
+      <div class="main-head"><div><h2>Leads</h2><p>Everyone who submitted an "Apply Now" form.</p></div></div>
+      <div class="card"><div class="table-wrap"><table id="leadsTable"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Track</th><th>Status</th><th>Received</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    </section>
+
+    <!-- WEBINAR -->
+    <section class="panel" id="panel-webinar">
+      <div class="main-head"><div><h2>Webinar</h2><p>Edit the next event and see who's registered.</p></div>
+        <button class="btn btn-primary" id="saveWebinarBtn">Save Event Details</button>
+      </div>
+      <div class="card">
+        <h3>Event Details</h3>
+        <div class="grid-2">
+          <div class="field"><label>Title</label><input id="w-title"></div>
+          <div class="field"><label>Venue</label><input id="w-venue"></div>
+          <div class="field"><label>Address</label><input id="w-address"></div>
+          <div class="field"><label>Date & time (ISO, with timezone)</label><input id="w-date" placeholder="2026-09-02T17:00:00+05:30"></div>
+          <div class="field"><label>End time label</label><input id="w-endtime"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Registrations (<span id="regCount">0</span>)</h3>
+        <div class="table-wrap"><table id="regTable"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Track</th><th>Guests</th><th>Registered</th><th></th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- STUDENTS -->
+    <section class="panel" id="panel-students">
+      <div class="main-head"><div><h2>Students</h2><p>Every student account, their progress, and what they see on their dashboard.</p></div>
+        <button class="btn btn-primary" id="addStudentBtn">+ Add Student</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table id="studentsTable"><thead><tr><th>Name</th><th>Email</th><th>Track</th><th>Progress</th><th>XP</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    </section>
+
+    <!-- MENTORS -->
+    <section class="panel" id="panel-mentors">
+      <div class="main-head"><div><h2>Mentors</h2><p>Payment tracking and correction requests.</p></div>
+        <button class="btn btn-primary" id="addMentorBtn">+ Add Mentor</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table id="mentorsTable"><thead><tr><th>Name</th><th>Track</th><th>Rate</th><th>Completed</th><th>Paid</th><th>Pending</th><th></th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card">
+        <h3>Correction Requests</h3>
+        <div class="table-wrap"><table id="correctionsTable"><thead><tr><th>Mentor</th><th>Session</th><th>Issue</th><th>Details</th><th>Status</th><th></th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- EMPLOYERS -->
+    <section class="panel" id="panel-employers">
+      <div class="main-head"><div><h2>Employers</h2><p>Hiring partner accounts and the openings they've posted.</p></div>
+        <button class="btn btn-primary" id="addEmployerBtn">+ Add Employer</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table id="employersTable"><thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Open Requests</th><th></th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card">
+        <h3>All Hiring Requests</h3>
+        <div class="table-wrap"><table id="hiringTable"><thead><tr><th>Company</th><th>Department</th><th>Role</th><th>Openings</th><th>Matches</th><th>Date</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="panel" id="panel-settings">
+      <div class="main-head"><div><h2>Settings</h2><p>Admin account security.</p></div></div>
+      <div class="card" style="max-width:420px;">
+        <h3>Change Password</h3>
+        <div class="field"><label>Current password</label><input id="s-current-pass" type="password"></div>
+        <div class="field"><label>New password</label><input id="s-new-pass" type="password"></div>
+        <button class="btn btn-primary btn-block" id="changePassBtn" style="margin-top:14px;">Update Password</button>
+        <div class="error-text" id="settingsMsg" style="margin-top:10px;"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

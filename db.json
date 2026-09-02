@@ -1,0 +1,291 @@
+{
+  "content": {
+    "hero": {
+      "eyebrow": "Career programs, not classroom theory",
+      "cycleWords": [
+        "Marketing",
+        "AI",
+        "Data Science",
+        "Code"
+      ],
+      "headlineSuffix": "before you finish your degree.",
+      "sub": "20-week industry-aligned programs in the skills companies are actually hiring for \u2014 built with live projects, real mentors and a placement team that works alongside you from day one.",
+      "stats": [
+        {
+          "value": 20,
+          "suffix": " wks",
+          "label": "Per career track"
+        },
+        {
+          "value": 4,
+          "suffix": "",
+          "label": "In-demand tracks"
+        }
+      ]
+    },
+    "usp": {
+      "headline": "No placement. No fees.*",
+      "body": "You pay for the program up front. Placement support \u2014 resume reviews, mock interviews, referrals and employer intros \u2014 comes at no extra cost, for as long as it takes.",
+      "disclaimer": "*Placement support is provided at no additional charge and does not guarantee a job offer. Outcomes depend on individual performance, market conditions and employer decisions."
+    },
+    "courses": [
+      {
+        "id": "dm",
+        "tag": "Digital Marketing",
+        "title": "Digital Marketing",
+        "blurb": "SEO, paid media, content strategy and analytics \u2014 plan and run campaigns that move real numbers.",
+        "fee": 20000,
+        "duration": "20 Weeks"
+      },
+      {
+        "id": "ai",
+        "tag": "Artificial Intelligence",
+        "title": "Artificial Intelligence",
+        "blurb": "Machine learning fundamentals, neural networks and applied automation projects for real workflows.",
+        "fee": 20000,
+        "duration": "20 Weeks"
+      },
+      {
+        "id": "ds",
+        "tag": "Data Science",
+        "title": "Data Science",
+        "blurb": "Statistics, Python, and visualization \u2014 turn messy data into decisions people can act on.",
+        "fee": 20000,
+        "duration": "20 Weeks"
+      },
+      {
+        "id": "fs",
+        "tag": "Full Stack Development",
+        "title": "Full Stack Development",
+        "blurb": "Front end, back end and databases \u2014 ship and deploy complete web applications end to end.",
+        "fee": 20000,
+        "duration": "20 Weeks"
+      }
+    ],
+    "testimonials": [
+      {
+        "quote": "The mock interviews made the real ones feel routine by the time I sat for them.",
+        "name": "Priya S.",
+        "track": "Digital Marketing track"
+      },
+      {
+        "quote": "Having a coach review my resume line by line changed how I described my own projects.",
+        "name": "Karan V.",
+        "track": "Full Stack track"
+      },
+      {
+        "quote": "I liked that placement support didn't stop after the course ended \u2014 it kept going.",
+        "name": "Meher A.",
+        "track": "Data Science track"
+      }
+    ],
+    "webinar": {
+      "title": "Meet Byte Morphix in person \u2014 Hyatt Regency, Gurugram",
+      "venue": "Hyatt Regency, Gurugram",
+      "address": "Block C, Sector 44, Gurugram, Haryana",
+      "dateISO": "2026-09-02T17:00:00+05:30",
+      "endTime": "7:00 PM IST",
+      "agenda": [
+        {
+          "time": "5:00 PM",
+          "title": "Check-in & welcome",
+          "desc": "Registration, name badges and light refreshments."
+        },
+        {
+          "time": "5:20 PM",
+          "title": "Program overview",
+          "desc": "A walk-through of all four tracks, the 20-week structure and how the fee and placement support work."
+        },
+        {
+          "time": "5:50 PM",
+          "title": "Live mini-class",
+          "desc": "Sit in on a shortened real class session led by one of our mentors."
+        },
+        {
+          "time": "6:20 PM",
+          "title": "Meet current learners",
+          "desc": "Informal conversations with people currently partway through a track."
+        },
+        {
+          "time": "6:45 PM",
+          "title": "Open Q&A",
+          "desc": "Ask anything \u2014 fees, schedules, eligibility, career support, all of it."
+        }
+      ]
+    }
+  },
+  "leads": [],
+  "webinarRegistrations": [],
+  "students": [
+    {
+      "id": "stu_1",
+      "name": "Test Student",
+      "email": "test@gmail.com",
+      "passwordHash": "$2a$10$NXY9/FgZGaPLMtazQpN0p.IcawaPzDKjjpQlzDb5lyalV1S5meh1W",
+      "track": "Full Stack Development",
+      "weekProgress": 9,
+      "totalWeeks": 20,
+      "xp": 2150,
+      "xpTarget": 3000,
+      "streakDays": 12,
+      "badges": [
+        {
+          "label": "Fast Starter",
+          "earned": true
+        },
+        {
+          "label": "5 Projects Shipped",
+          "earned": true
+        },
+        {
+          "label": "Perfect Attendance \u2014 Month 1",
+          "earned": true
+        },
+        {
+          "label": "Portfolio Complete",
+          "earned": false
+        },
+        {
+          "label": "Interview Ready",
+          "earned": false
+        }
+      ],
+      "courseCompletionDate": null,
+      "lectures": [
+        {
+          "week": "Week 8",
+          "title": "Git & GitHub",
+          "videoUrl": "https://example.com/video/week8",
+          "notesUrl": "https://example.com/notes/week8.pdf"
+        },
+        {
+          "week": "Week 7",
+          "title": "Advanced JavaScript",
+          "videoUrl": "https://example.com/video/week7",
+          "notesUrl": "https://example.com/notes/week7.pdf"
+        },
+        {
+          "week": "Week 6",
+          "title": "JavaScript Fundamentals",
+          "videoUrl": "https://example.com/video/week6",
+          "notesUrl": "https://example.com/notes/week6.pdf"
+        },
+        {
+          "week": "Week 5",
+          "title": "Responsive Design",
+          "videoUrl": "https://example.com/video/week5",
+          "notesUrl": "https://example.com/notes/week5.pdf"
+        }
+      ],
+      "nextSession": {
+        "title": "Backend APIs & Authentication",
+        "dateISO": "2026-09-03T19:00:00+05:30",
+        "joinLink": "https://meet.example.com/bytemorphix-fs-week9"
+      }
+    }
+  ],
+  "mentors": [
+    {
+      "id": "men_1",
+      "name": "Test Mentor",
+      "email": "test@gmail.com",
+      "passwordHash": "$2a$10$NXY9/FgZGaPLMtazQpN0p.IcawaPzDKjjpQlzDb5lyalV1S5meh1W",
+      "track": "Full Stack Development",
+      "ratePerSession": 2000,
+      "sessionsCompleted": 90,
+      "sessionsPaid": 86,
+      "sessionsPending": 4,
+      "correctionRequests": []
+    }
+  ],
+  "employers": [
+    {
+      "id": "emp_1",
+      "name": "Test Employer",
+      "email": "test@gmail.com",
+      "passwordHash": "$2a$10$NXY9/FgZGaPLMtazQpN0p.IcawaPzDKjjpQlzDb5lyalV1S5meh1W",
+      "company": "Northwind Digital",
+      "hiringRequests": []
+    }
+  ],
+  "candidatePool": {
+    "dm": [
+      {
+        "name": "Ishita Verma",
+        "headline": "Digital Marketing \u00b7 Meta & Google Ads certified project work"
+      },
+      {
+        "name": "Rahul Nair",
+        "headline": "Digital Marketing \u00b7 SEO + content strategy portfolio"
+      },
+      {
+        "name": "Simran Kaur",
+        "headline": "Digital Marketing \u00b7 Performance marketing & GA4 dashboards"
+      },
+      {
+        "name": "Aditya Rao",
+        "headline": "Digital Marketing \u00b7 Social media growth campaigns"
+      }
+    ],
+    "ai": [
+      {
+        "name": "Vikram Shah",
+        "headline": "Artificial Intelligence \u00b7 NLP support-ticket classifier project"
+      },
+      {
+        "name": "Neha Joshi",
+        "headline": "Artificial Intelligence \u00b7 AI automation workflow projects"
+      },
+      {
+        "name": "Farhan Ali",
+        "headline": "Artificial Intelligence \u00b7 Chatbot & recommendation system builds"
+      },
+      {
+        "name": "Divya Menon",
+        "headline": "Artificial Intelligence \u00b7 Applied ML fundamentals project work"
+      }
+    ],
+    "ds": [
+      {
+        "name": "Karthik Iyer",
+        "headline": "Data Science \u00b7 Sales prediction & forecasting projects"
+      },
+      {
+        "name": "Ananya Gupta",
+        "headline": "Data Science \u00b7 SQL + dashboarding portfolio"
+      },
+      {
+        "name": "Rohan Desai",
+        "headline": "Data Science \u00b7 Customer segmentation & analytics"
+      },
+      {
+        "name": "Priyanka Sen",
+        "headline": "Data Science \u00b7 Business analytics dashboards"
+      }
+    ],
+    "fs": [
+      {
+        "name": "Aman Kapoor",
+        "headline": "Full Stack Development \u00b7 React + Node booking platform"
+      },
+      {
+        "name": "Sneha Reddy",
+        "headline": "Full Stack Development \u00b7 E-commerce site with payments"
+      },
+      {
+        "name": "Tarun Malhotra",
+        "headline": "Full Stack Development \u00b7 CRM application with auth"
+      },
+      {
+        "name": "Meera Pillai",
+        "headline": "Full Stack Development \u00b7 Job portal, full deployment"
+      }
+    ]
+  },
+  "adminUsers": [
+    {
+      "email": "admin@bytemorphix.com",
+      "passwordHash": "$2a$10$fAdbGYg0kwN9aP9mZgnVIOpOv94z.cYgwa3HkZURLY4y6ynzTKGu2"
+    }
+  ]
+}
