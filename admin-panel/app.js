@@ -1,604 +1,599 @@
-(function(){
-  let TOKEN = null; // kept in memory only — refresh requires re-login, on purpose.
+/* =========================================================================
+   Byte Morphix Admin — core
+   Auth, navigation, permission gating, notifications, and the shared helpers
+   that modules.js builds the rest of the panels on top of.
+   ========================================================================= */
+(function () {
+  'use strict';
+
+  let TOKEN = null;          // in memory only — a refresh means a fresh login
+  let ME = null;             // { id, name, email, role, permissions, courseIds }
+  const CACHE = {};          // courses / batches / staff, fetched once per session
 
   const $ = sel => document.querySelector(sel);
   const $$ = sel => Array.from(document.querySelectorAll(sel));
 
-  // ---------- toast ----------
-  function toast(msg, type){
+  /* ------------------------------------------------------------- utilities */
+
+  function toast(msg, type) {
     const el = $('#toast');
     el.textContent = msg;
     el.className = 'toast show ' + (type || '');
-    setTimeout(()=> el.classList.remove('show'), 3200);
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 4200);
   }
 
-  // ---------- authenticated fetch ----------
-  async function api(path, opts){
+  // Everything user-supplied goes through this before it reaches innerHTML.
+  function esc(v) {
+    if (v === null || v === undefined) return '';
+    return String(v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  const fmtDate = v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const fmtDateTime = v => v ? new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  const money = n => '₹' + (Number(n) || 0).toLocaleString('en-IN');
+  const lakh = n => n ? '₹' + (Number(n) / 100000).toFixed(1) + ' LPA' : '—';
+
+  function timeAgo(iso) {
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+    return fmtDate(iso);
+  }
+
+  const titleCase = s => String(s || '').replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  /* ------------------------------------------------------------ API client */
+
+  async function api(path, opts) {
     opts = opts || {};
-    opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers || {});
-    if(TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
-    if(opts.body && typeof opts.body !== 'string') opts.body = JSON.stringify(opts.body);
+    opts.headers = Object.assign({}, opts.headers || {});
+    if (!(opts.body instanceof FormData)) {
+      opts.headers['Content-Type'] = 'application/json';
+      if (opts.body && typeof opts.body !== 'string') opts.body = JSON.stringify(opts.body);
+    }
+    if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
+
     const res = await fetch('/api' + path, opts);
-    if(res.status === 401){
+    if (res.status === 401) {
       toast('Session expired — please log in again.', 'error');
       logout();
       throw new Error('Unauthorized');
     }
-    const data = await res.json().catch(()=> ({}));
-    if(!res.ok) throw new Error(data.error || 'Request failed');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
     return data;
   }
 
-  // ---------- generic modal ----------
-  function openModal(title, fields, initial){
-    return new Promise((resolve)=>{
+  const can = perm => !!(ME && (ME.permissions.includes('*') || ME.permissions.includes(perm)));
+
+  /**
+   * Raw fetch with the auth header attached, for responses that aren't JSON
+   * — document scans, PDFs. The token never leaves this closure.
+   */
+  async function authFetch(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {});
+    return fetch('/api' + path, opts);
+  }
+
+  /* --------------------------------------------------------------- modals */
+
+  /**
+   * Generic form modal. Field types: text, number, email, password, date,
+   * datetime-local, textarea, select, multiselect, checkbox.
+   * Returns the collected values, or null if cancelled.
+   */
+  function openModal(title, fields, initial, opts) {
+    opts = opts || {};
+    initial = initial || {};
+
+    return new Promise(resolve => {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay open';
+
+      const fieldHtml = fields.map(f => {
+        const v = initial[f.key];
+        if (f.type === 'select') {
+          const options = (f.options || []).map(o => {
+            const val = typeof o === 'object' ? o.value : o;
+            const lbl = typeof o === 'object' ? o.label : o;
+            return `<option value="${esc(val)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(lbl)}</option>`;
+          }).join('');
+          return `<div class="field"><label>${esc(f.label)}</label>
+            <select data-key="${esc(f.key)}">${f.placeholder ? `<option value="">${esc(f.placeholder)}</option>` : ''}${options}</select>
+            ${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+        }
+        if (f.type === 'multiselect') {
+          const sel = Array.isArray(v) ? v.map(String) : [];
+          const boxes = (f.options || []).map(o => {
+            const val = typeof o === 'object' ? o.value : o;
+            const lbl = typeof o === 'object' ? o.label : o;
+            return `<label class="checkbox-row"><input type="checkbox" data-multi="${esc(f.key)}" value="${esc(val)}" ${sel.includes(String(val)) ? 'checked' : ''}> ${esc(lbl)}</label>`;
+          }).join('');
+          return `<div class="field"><label>${esc(f.label)}</label>
+            <div class="checkbox-grid">${boxes || '<span class="muted">Nothing to choose from yet.</span>'}</div>
+            ${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+        }
+        if (f.type === 'checkbox') {
+          return `<label class="checkbox-row"><input type="checkbox" data-key="${esc(f.key)}" data-bool="1" ${v ? 'checked' : ''}> ${esc(f.label)}</label>`;
+        }
+        if (f.type === 'textarea') {
+          return `<div class="field"><label>${esc(f.label)}</label>
+            <textarea data-key="${esc(f.key)}" rows="${f.rows || 3}" placeholder="${esc(f.placeholder || '')}">${esc(v || '')}</textarea>
+            ${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+        }
+        if (f.type === 'file') {
+          return `<div class="field"><label>${esc(f.label)}</label>
+            <input type="file" data-key="${esc(f.key)}" data-file="1" accept="${esc(f.accept || '')}">
+            ${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+        }
+        return `<div class="field"><label>${esc(f.label)}</label>
+          <input data-key="${esc(f.key)}" type="${f.type || 'text'}" value="${esc(v != null ? v : '')}" placeholder="${esc(f.placeholder || '')}">
+          ${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+      }).join('');
+
       overlay.innerHTML = `
-        <div class="modal-box">
-          <h3>${title}</h3>
-          ${fields.map(f => `
-            <div class="field">
-              <label>${f.label}</label>
-              ${f.type === 'select'
-                ? `<select data-key="${f.key}">${f.options.map(o=>`<option value="${o}" ${initial && initial[f.key]===o ? 'selected':''}>${o}</option>`).join('')}</select>`
-                : `<input data-key="${f.key}" type="${f.type||'text'}" value="${initial && initial[f.key]!=null ? String(initial[f.key]).replace(/"/g,'&quot;') : ''}" placeholder="${f.placeholder||''}">`
-              }
-            </div>`).join('')}
+        <div class="modal-box ${opts.wide ? 'wide' : ''}">
+          <h3>${esc(title)}</h3>
+          ${opts.subtitle ? `<div class="modal-sub">${esc(opts.subtitle)}</div>` : ''}
+          ${opts.notice ? `<div class="notice ${esc(opts.noticeType || 'info')}">${opts.notice}</div>` : ''}
+          ${fieldHtml}
+          <div class="error-text" data-modal-error></div>
           <div class="modal-actions">
-            <button class="btn btn-ghost" id="modalCancel">Cancel</button>
-            <button class="btn btn-primary" id="modalSave">Save</button>
+            <button class="btn btn-ghost" data-cancel>Cancel</button>
+            <button class="btn btn-primary" data-save>${esc(opts.saveLabel || 'Save')}</button>
           </div>
         </div>`;
+
       document.body.appendChild(overlay);
-      overlay.querySelector('#modalCancel').onclick = ()=>{ overlay.remove(); resolve(null); };
-      overlay.querySelector('#modalSave').onclick = ()=>{
+      const firstInput = overlay.querySelector('input,select,textarea');
+      if (firstInput) setTimeout(() => firstInput.focus(), 40);
+
+      const close = val => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(val); };
+      const onKey = e => { if (e.key === 'Escape') close(null); };
+      document.addEventListener('keydown', onKey);
+
+      overlay.querySelector('[data-cancel]').onclick = () => close(null);
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+
+      overlay.querySelector('[data-save]').onclick = () => {
         const values = {};
-        overlay.querySelectorAll('[data-key]').forEach(el=> values[el.dataset.key] = el.value);
-        overlay.remove();
-        resolve(values);
+        overlay.querySelectorAll('[data-key]').forEach(el => {
+          if (el.dataset.file) { values[el.dataset.key] = el.files[0] || null; return; }
+          if (el.dataset.bool) { values[el.dataset.key] = el.checked; return; }
+          values[el.dataset.key] = el.value;
+        });
+        overlay.querySelectorAll('[data-multi]').forEach(el => {
+          const k = el.dataset.multi;
+          values[k] = values[k] || [];
+          if (el.checked) values[k].push(el.value);
+        });
+
+        if (opts.validate) {
+          const err = opts.validate(values);
+          if (err) {
+            const box = overlay.querySelector('[data-modal-error]');
+            box.textContent = err;
+            box.classList.add('show');
+            return;
+          }
+        }
+        close(values);
       };
     });
   }
 
-  function confirmDialog(msg){
-    return window.confirm(msg);
+  /** Full-width HTML modal for read-heavy views (threads, invoices, rosters). */
+  function openSheet(title, html, actions) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    overlay.innerHTML = `
+      <div class="modal-box wide">
+        <h3>${esc(title)}</h3>
+        <div data-sheet-body>${html}</div>
+        <div class="modal-actions">
+          ${(actions || []).map((a, i) => `<button class="btn ${esc(a.cls || 'btn-ghost')}" data-act="${i}">${esc(a.label)}</button>`).join('')}
+          <button class="btn btn-ghost" data-close>Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('[data-close]').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    (actions || []).forEach((a, i) => {
+      overlay.querySelector(`[data-act="${i}"]`).onclick = async () => {
+        const keep = await a.onClick(overlay);
+        if (!keep) close();
+      };
+    });
+    return { overlay, close, body: overlay.querySelector('[data-sheet-body]') };
   }
 
-  // ======================================================
-  // LOGIN
-  // ======================================================
-  $('#loginBtn').addEventListener('click', async ()=>{
+  const confirmDialog = msg => window.confirm(msg);
+
+  function empty(cols, msg) {
+    return `<tr><td colspan="${cols}" class="empty-state">${esc(msg)}</td></tr>`;
+  }
+
+  /* ---------------------------------------------------------------- LOGIN */
+
+  async function doLogin() {
     const email = $('#admin-email').value.trim();
     const password = $('#admin-pass').value;
     const errEl = $('#loginError');
     errEl.classList.remove('show');
-    try{
+
+    try {
       const res = await fetch('/api/auth/login', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({role:'admin', email, password})
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      if(!res.ok) throw new Error(data.error || 'Login failed');
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+
+      if (!data.permissions || !data.permissions.length) {
+        throw new Error('This login is a portal account, not an admin account. Use your staff credentials here.');
+      }
+
       TOKEN = data.token;
+      ME = { id: data.id, name: data.name, email, role: data.role, roleLabel: data.roleLabel, permissions: data.permissions, courseIds: data.courseIds || [] };
+
       $('#loginScreen').style.display = 'none';
       $('#appShell').classList.add('show');
-      loadOverview();
-    } catch(err){
+      $('#admin-pass').value = '';
+
+      applyPermissions();
+      await bootstrap();
+    } catch (err) {
       errEl.textContent = err.message;
       errEl.classList.add('show');
     }
-  });
+  }
 
-  function logout(){
-    TOKEN = null;
+  $('#loginBtn').addEventListener('click', doLogin);
+  ['#admin-email', '#admin-pass'].forEach(sel =>
+    $(sel).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
+
+  function logout() {
+    TOKEN = null; ME = null;
+    stopPolling();
     $('#appShell').classList.remove('show');
     $('#loginScreen').style.display = 'flex';
-    $('#admin-pass').value = '';
   }
   $('#logoutBtn').addEventListener('click', logout);
 
-  // ======================================================
-  // NAVIGATION
-  // ======================================================
-  const loaders = {
-    overview: loadOverview, content: loadContent, code: loadCode, leads: loadLeads,
-    webinar: loadWebinar, students: loadStudents, mentors: loadMentors,
-    employers: loadEmployers, settings: ()=>{}
-  };
-  $$('.nav-item').forEach(item=>{
-    item.addEventListener('click', ()=>{
-      $$('.nav-item').forEach(i=>i.classList.remove('active'));
-      item.classList.add('active');
-      $$('.panel').forEach(p=>p.classList.remove('active'));
-      $('#panel-' + item.dataset.panel).classList.add('active');
-      $('#sidebar').classList.remove('open');
-      const load = loaders[item.dataset.panel];
-      if(load) load();
+  /* --------------------------------------------------- permission gating */
+
+  /**
+   * Hides nav items the role can't use. The server enforces the same rules,
+   * so this is about not showing people doors they can't open — not security.
+   */
+  function applyPermissions() {
+    $('#whoName').textContent = ME.name;
+    $('#whoEmail').textContent = ME.email;
+    $('#whoRole').textContent = ME.roleLabel || titleCase(ME.role);
+
+    $$('.nav-item').forEach(item => {
+      const perm = item.dataset.perm;
+      item.classList.toggle('locked', !!(perm && !can(perm)));
     });
-  });
-  $('#menuToggle').addEventListener('click', ()=> $('#sidebar').classList.toggle('open'));
 
-  // ======================================================
-  // OVERVIEW
-  // ======================================================
-  async function loadOverview(){
-    try{
-      const d = await api('/admin/overview');
-      $('#overviewStats').innerHTML = `
-        <div class="stat-card"><b>${d.leads}</b><span>Total leads</span></div>
-        <div class="stat-card"><b>${d.webinarRegistrations}</b><span>Webinar registrations</span></div>
-        <div class="stat-card"><b>${d.students}</b><span>Students</span></div>
-        <div class="stat-card"><b>${d.mentors}</b><span>Mentors</span></div>
-        <div class="stat-card"><b>${d.employers}</b><span>Employers</span></div>
-        <div class="stat-card"><b>${d.pendingCorrections}</b><span>Pending corrections</span></div>
-        <div class="stat-card"><b>${d.totalHiringRequests}</b><span>Hiring requests</span></div>
-      `;
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  // ======================================================
-  // SITE CONTENT
-  // ======================================================
-  let contentCache = null;
-
-  function renderCourseEditor(courses){
-    $('#coursesEditor').innerHTML = courses.map((c, i) => `
-      <div class="editor-item" data-index="${i}">
-        <button class="remove-item" data-remove-course="${i}">✕</button>
-        <div class="grid-2">
-          <div class="field"><label>ID (short code)</label><input data-course-field="id" value="${c.id}"></div>
-          <div class="field"><label>Tag / Title</label><input data-course-field="tag" value="${c.tag}"></div>
-        </div>
-        <div class="field"><label>Description</label><textarea rows="2" data-course-field="blurb">${c.blurb}</textarea></div>
-        <div class="grid-2">
-          <div class="field"><label>Fee (₹)</label><input type="number" data-course-field="fee" value="${c.fee}"></div>
-          <div class="field"><label>Duration</label><input data-course-field="duration" value="${c.duration}"></div>
-        </div>
-      </div>
-    `).join('');
-    $$('[data-remove-course]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        contentCache.courses.splice(Number(btn.dataset.removeCourse), 1);
-        renderCourseEditor(contentCache.courses);
-      });
-    });
-  }
-
-  function renderTestimonialEditor(list){
-    $('#testimonialsEditor').innerHTML = list.map((t, i) => `
-      <div class="editor-item" data-index="${i}">
-        <button class="remove-item" data-remove-testi="${i}">✕</button>
-        <div class="field"><label>Quote</label><textarea rows="2" data-testi-field="quote">${t.quote}</textarea></div>
-        <div class="grid-2">
-          <div class="field"><label>Name</label><input data-testi-field="name" value="${t.name}"></div>
-          <div class="field"><label>Track label</label><input data-testi-field="track" value="${t.track}"></div>
-        </div>
-      </div>
-    `).join('');
-    $$('[data-remove-testi]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        contentCache.testimonials.splice(Number(btn.dataset.removeTesti), 1);
-        renderTestimonialEditor(contentCache.testimonials);
-      });
-    });
-  }
-
-  function collectListEditor(containerSel, itemFieldAttr){
-    return $$(containerSel + ' .editor-item').map(item=>{
-      const obj = {};
-      item.querySelectorAll(`[${itemFieldAttr}]`).forEach(el=>{
-        const key = el.getAttribute(itemFieldAttr);
-        obj[key] = el.type === 'number' ? Number(el.value) : el.value;
-      });
-      return obj;
-    });
-  }
-
-  async function loadContent(){
-    try{
-      contentCache = await api('/admin/content');
-      $('#c-hero-eyebrow').value = contentCache.hero.eyebrow || '';
-      $('#c-hero-cyclewords').value = (contentCache.hero.cycleWords || []).join(', ');
-      $('#c-hero-suffix').value = contentCache.hero.headlineSuffix || '';
-      $('#c-hero-sub').value = contentCache.hero.sub || '';
-      $('#c-usp-headline').value = contentCache.usp.headline || '';
-      $('#c-usp-body').value = contentCache.usp.body || '';
-      $('#c-usp-disclaimer').value = contentCache.usp.disclaimer || '';
-      renderCourseEditor(contentCache.courses);
-      renderTestimonialEditor(contentCache.testimonials);
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  $('#addCourseBtn').addEventListener('click', ()=>{
-    contentCache.courses.push({id:'', tag:'New Course', blurb:'', fee:20000, duration:'20 Weeks'});
-    renderCourseEditor(contentCache.courses);
-  });
-  $('#addTestimonialBtn').addEventListener('click', ()=>{
-    contentCache.testimonials.push({quote:'', name:'', track:''});
-    renderTestimonialEditor(contentCache.testimonials);
-  });
-
-  $('#saveContentBtn').addEventListener('click', async ()=>{
-    const payload = {
-      hero: {
-        eyebrow: $('#c-hero-eyebrow').value,
-        cycleWords: $('#c-hero-cyclewords').value.split(',').map(s=>s.trim()).filter(Boolean),
-        headlineSuffix: $('#c-hero-suffix').value,
-        sub: $('#c-hero-sub').value,
-        stats: contentCache.hero.stats
-      },
-      usp: {
-        headline: $('#c-usp-headline').value,
-        body: $('#c-usp-body').value,
-        disclaimer: $('#c-usp-disclaimer').value
-      },
-      courses: collectListEditor('#coursesEditor', 'data-course-field'),
-      testimonials: collectListEditor('#testimonialsEditor', 'data-testi-field'),
-      webinar: contentCache.webinar
-    };
-    try{
-      await api('/admin/content', {method:'PUT', body: payload});
-      toast('Site content saved — the live site will reflect this immediately.', 'success');
-      loadContent();
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  // ======================================================
-  // CODE EDITOR
-  // ======================================================
-  let currentFile = null;
-  let originalContent = '';
-
-  async function loadCode(){
-    try{
-      const files = await api('/admin/files');
-      $('#fileList').innerHTML = files.map(f => `
-        <div class="file-item" data-file="${f.name}"><span class="fname">${f.name}</span><span style="font-size:11px; color:var(--ink-faint);">${(f.size/1024).toFixed(1)}kb</span></div>
-      `).join('');
-      $$('.file-item').forEach(item=>{
-        item.addEventListener('click', ()=> openFile(item.dataset.file));
-      });
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  async function openFile(name){
-    try{
-      const data = await api('/admin/files/' + encodeURIComponent(name));
-      currentFile = name;
-      originalContent = data.content;
-      $('#editorFileName').textContent = name;
-      $('#codeTextarea').value = data.content;
-      $('#codeTextarea').disabled = false;
-      $('#saveFileBtn').disabled = false;
-      $('#deleteFileBtn').disabled = false;
-      $('#editorStatus').textContent = 'Saved';
-      $('#editorStatus').className = 'editor-status saved';
-      $$('.file-item').forEach(i=> i.classList.toggle('active', i.dataset.file === name));
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  $('#codeTextarea').addEventListener('input', ()=>{
-    if(!currentFile) return;
-    const dirty = $('#codeTextarea').value !== originalContent;
-    $('#editorStatus').textContent = dirty ? 'Unsaved changes' : 'Saved';
-    $('#editorStatus').className = 'editor-status ' + (dirty ? 'dirty' : 'saved');
-  });
-
-  $('#saveFileBtn').addEventListener('click', async ()=>{
-    if(!currentFile) return;
-    try{
-      await api('/admin/files/' + encodeURIComponent(currentFile), {method:'PUT', body:{content: $('#codeTextarea').value}});
-      originalContent = $('#codeTextarea').value;
-      $('#editorStatus').textContent = 'Saved';
-      $('#editorStatus').className = 'editor-status saved';
-      toast(`${currentFile} saved. A backup of the previous version was kept.`, 'success');
-      loadCode();
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  $('#deleteFileBtn').addEventListener('click', async ()=>{
-    if(!currentFile) return;
-    if(!confirmDialog(`Delete ${currentFile}? A backup will be kept, but this removes it from the live site.`)) return;
-    try{
-      await api('/admin/files/' + encodeURIComponent(currentFile), {method:'DELETE'});
-      toast(`${currentFile} deleted.`, 'success');
-      currentFile = null;
-      $('#editorFileName').textContent = 'Select a file';
-      $('#codeTextarea').value = '';
-      $('#codeTextarea').disabled = true;
-      $('#saveFileBtn').disabled = true;
-      $('#deleteFileBtn').disabled = true;
-      loadCode();
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  $('#newFileBtn').addEventListener('click', async ()=>{
-    const name = $('#newFileName').value.trim();
-    if(!name) return;
-    try{
-      await api('/admin/files', {method:'POST', body:{name, content:''}});
-      $('#newFileName').value = '';
-      toast(`${name} created.`, 'success');
-      loadCode();
-      openFile(name);
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  // ======================================================
-  // LEADS
-  // ======================================================
-  async function loadLeads(){
-    try{
-      const leads = await api('/admin/leads');
-      const tbody = $('#leadsTable tbody');
-      if(!leads.length){ tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No leads yet.</td></tr>`; return; }
-      tbody.innerHTML = leads.slice().reverse().map(l => `
-        <tr>
-          <td>${l.name}</td><td>${l.email}</td><td>${l.phone}</td><td>${l.track}</td>
-          <td><span class="pill ${l.status}">${l.status}</span></td>
-          <td>${new Date(l.createdAt).toLocaleString()}</td>
-          <td class="row-actions">
-            <button class="btn btn-ghost btn-sm" data-mark-contacted="${l.id}">Mark Contacted</button>
-            <button class="btn btn-danger btn-sm" data-delete-lead="${l.id}">Delete</button>
-          </td>
-        </tr>`).join('');
-      $$('[data-mark-contacted]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        await api('/admin/leads/' + btn.dataset.markContacted, {method:'PUT', body:{status:'contacted'}});
-        loadLeads();
-      }));
-      $$('[data-delete-lead]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        if(!confirmDialog('Delete this lead?')) return;
-        await api('/admin/leads/' + btn.dataset.deleteLead, {method:'DELETE'});
-        loadLeads();
-      }));
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  // ======================================================
-  // WEBINAR
-  // ======================================================
-  async function loadWebinar(){
-    try{
-      const content = await api('/admin/content');
-      const w = content.webinar;
-      $('#w-title').value = w.title || '';
-      $('#w-venue').value = w.venue || '';
-      $('#w-address').value = w.address || '';
-      $('#w-date').value = w.dateISO || '';
-      $('#w-endtime').value = w.endTime || '';
-
-      const regs = await api('/admin/webinar-registrations');
-      $('#regCount').textContent = regs.length;
-      const tbody = $('#regTable tbody');
-      if(!regs.length){ tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No registrations yet.</td></tr>`; return; }
-      tbody.innerHTML = regs.slice().reverse().map(r => `
-        <tr>
-          <td>${r.name}</td><td>${r.email}</td><td>${r.phone}</td><td>${r.track}</td><td>${r.guests}</td>
-          <td>${new Date(r.registeredAt).toLocaleString()}</td>
-          <td><button class="btn btn-danger btn-sm" data-delete-reg="${r.id}">Remove</button></td>
-        </tr>`).join('');
-      $$('[data-delete-reg]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        if(!confirmDialog('Remove this registration?')) return;
-        await api('/admin/webinar-registrations/' + btn.dataset.deleteReg, {method:'DELETE'});
-        loadWebinar();
-      }));
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  $('#saveWebinarBtn').addEventListener('click', async ()=>{
-    try{
-      await api('/admin/webinar-config', {body:{
-        title: $('#w-title').value, venue: $('#w-venue').value, address: $('#w-address').value,
-        dateISO: $('#w-date').value, endTime: $('#w-endtime').value
-      }, method:'PUT'});
-      toast('Webinar details updated.', 'success');
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  // ======================================================
-  // STUDENTS
-  // ======================================================
-  async function loadStudents(){
-    try{
-      const students = await api('/admin/students');
-      const tbody = $('#studentsTable tbody');
-      if(!students.length){ tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No students yet.</td></tr>`; return; }
-      tbody.innerHTML = students.map(s => `
-        <tr>
-          <td>${s.name}</td><td>${s.email}</td><td>${s.track}</td>
-          <td>Week ${s.weekProgress}/${s.totalWeeks}</td><td>${s.xp}/${s.xpTarget}</td>
-          <td class="row-actions">
-            <button class="btn btn-ghost btn-sm" data-edit-student="${s.id}">Edit</button>
-            <button class="btn btn-danger btn-sm" data-delete-student="${s.id}">Delete</button>
-          </td>
-        </tr>`).join('');
-      $$('[data-edit-student]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        const s = students.find(x=>x.id===btn.dataset.editStudent);
-        const values = await openModal('Edit Student', [
-          {key:'name', label:'Name'}, {key:'email', label:'Email'},
-          {key:'track', label:'Track'}, {key:'weekProgress', label:'Week Progress', type:'number'},
-          {key:'xp', label:'XP', type:'number'}, {key:'password', label:'New password (leave blank to keep)'}
-        ], s);
-        if(!values) return;
-        if(!values.password) delete values.password;
-        await api('/admin/students/' + s.id, {method:'PUT', body:values});
-        toast('Student updated.', 'success');
-        loadStudents();
-      }));
-      $$('[data-delete-student]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        if(!confirmDialog('Delete this student account?')) return;
-        await api('/admin/students/' + btn.dataset.deleteStudent, {method:'DELETE'});
-        loadStudents();
-      }));
-    } catch(e){ toast(e.message, 'error'); }
-  }
-
-  $('#addStudentBtn').addEventListener('click', async ()=>{
-    const values = await openModal('Add Student', [
-      {key:'name', label:'Name'}, {key:'email', label:'Email'}, {key:'password', label:'Password'},
-      {key:'track', label:'Track', type:'select', options:['Digital Marketing','Artificial Intelligence','Data Science','Full Stack Development']}
-    ]);
-    if(!values) return;
-    try{
-      await api('/admin/students', {method:'POST', body:values});
-      toast('Student added.', 'success');
-      loadStudents();
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  // ======================================================
-  // MENTORS
-  // ======================================================
-  async function loadMentors(){
-    try{
-      const mentors = await api('/admin/mentors');
-      const tbody = $('#mentorsTable tbody');
-      if(!mentors.length){ tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No mentors yet.</td></tr>`; }
-      else {
-        tbody.innerHTML = mentors.map(m => `
-          <tr>
-            <td>${m.name}</td><td>${m.track}</td><td>₹${m.ratePerSession}</td>
-            <td>${m.sessionsCompleted}</td><td>${m.sessionsPaid}</td><td>${m.sessionsPending}</td>
-            <td class="row-actions">
-              <button class="btn btn-ghost btn-sm" data-edit-mentor="${m.id}">Edit</button>
-              <button class="btn btn-danger btn-sm" data-delete-mentor="${m.id}">Delete</button>
-            </td>
-          </tr>`).join('');
+    // Hide a group heading when every item under it is hidden.
+    $$('.nav-group').forEach(group => {
+      let n = group.nextElementSibling, visible = false;
+      while (n && n.classList.contains('nav-item')) {
+        if (!n.classList.contains('locked')) visible = true;
+        n = n.nextElementSibling;
       }
-      $$('[data-edit-mentor]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        const m = mentors.find(x=>x.id===btn.dataset.editMentor);
-        const values = await openModal('Edit Mentor', [
-          {key:'name', label:'Name'}, {key:'track', label:'Track'},
-          {key:'ratePerSession', label:'Rate per session (₹)', type:'number'},
-          {key:'sessionsCompleted', label:'Sessions completed', type:'number'},
-          {key:'sessionsPaid', label:'Sessions paid', type:'number'},
-          {key:'sessionsPending', label:'Sessions pending', type:'number'}
-        ], m);
-        if(!values) return;
-        ['ratePerSession','sessionsCompleted','sessionsPaid','sessionsPending'].forEach(k=> values[k] = Number(values[k]));
-        await api('/admin/mentors/' + m.id, {method:'PUT', body:values});
-        toast('Mentor updated.', 'success');
-        loadMentors();
-      }));
-      $$('[data-delete-mentor]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        if(!confirmDialog('Delete this mentor account?')) return;
-        await api('/admin/mentors/' + btn.dataset.deleteMentor, {method:'DELETE'});
-        loadMentors();
-      }));
+      group.style.display = visible ? '' : 'none';
+    });
 
-      // Corrections
-      const allCorrections = [];
-      mentors.forEach(m => m.correctionRequests.forEach(c => allCorrections.push({...c, mentorName: m.name, mentorId: m.id})));
-      const ctbody = $('#correctionsTable tbody');
-      if(!allCorrections.length){ ctbody.innerHTML = `<tr><td colspan="6" class="empty-state">No correction requests.</td></tr>`; return; }
-      ctbody.innerHTML = allCorrections.map(c => `
-        <tr>
-          <td>${c.mentorName}</td><td>${c.weekOrSession || '—'}</td><td>${c.issue}</td><td>${c.details || '—'}</td>
-          <td><span class="pill ${c.status}">${c.status}</span></td>
-          <td>${c.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-resolve="${c.mentorId}|${c.id}">Mark Resolved</button>` : '—'}</td>
-        </tr>`).join('');
-      $$('[data-resolve]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        const [mentorId, reqId] = btn.dataset.resolve.split('|');
-        await api(`/admin/mentors/${mentorId}/corrections/${reqId}`, {method:'PUT', body:{status:'resolved'}});
-        toast('Correction marked as resolved.', 'success');
-        loadMentors();
-      }));
-    } catch(e){ toast(e.message, 'error'); }
+    const first = $$('.nav-item:not(.locked)')[0];
+    if (first) selectPanel(first.dataset.panel);
   }
 
-  $('#addMentorBtn').addEventListener('click', async ()=>{
-    const values = await openModal('Add Mentor', [
-      {key:'name', label:'Name'}, {key:'email', label:'Email'}, {key:'password', label:'Password'},
-      {key:'track', label:'Track', type:'select', options:['Digital Marketing','Artificial Intelligence','Data Science','Full Stack Development']},
-      {key:'ratePerSession', label:'Rate per session (₹)', type:'number', placeholder:'2000'}
-    ]);
-    if(!values) return;
-    values.ratePerSession = Number(values.ratePerSession) || 2000;
-    try{
-      await api('/admin/mentors', {method:'POST', body:values});
-      toast('Mentor added.', 'success');
-      loadMentors();
-    } catch(e){ toast(e.message, 'error'); }
-  });
-
-  // ======================================================
-  // EMPLOYERS
-  // ======================================================
-  async function loadEmployers(){
-    try{
-      const employers = await api('/admin/employers');
-      const tbody = $('#employersTable tbody');
-      if(!employers.length){ tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No employers yet.</td></tr>`; }
-      else {
-        tbody.innerHTML = employers.map(e => `
-          <tr>
-            <td>${e.company || '—'}</td><td>${e.name}</td><td>${e.email}</td><td>${e.hiringRequests.length}</td>
-            <td class="row-actions">
-              <button class="btn btn-ghost btn-sm" data-edit-employer="${e.id}">Edit</button>
-              <button class="btn btn-danger btn-sm" data-delete-employer="${e.id}">Delete</button>
-            </td>
-          </tr>`).join('');
-      }
-      $$('[data-edit-employer]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        const e = employers.find(x=>x.id===btn.dataset.editEmployer);
-        const values = await openModal('Edit Employer', [
-          {key:'name', label:'Contact name'}, {key:'company', label:'Company'}, {key:'email', label:'Email'}
-        ], e);
-        if(!values) return;
-        await api('/admin/employers/' + e.id, {method:'PUT', body:values});
-        toast('Employer updated.', 'success');
-        loadEmployers();
-      }));
-      $$('[data-delete-employer]').forEach(btn=> btn.addEventListener('click', async ()=>{
-        if(!confirmDialog('Delete this employer account?')) return;
-        await api('/admin/employers/' + btn.dataset.deleteEmployer, {method:'DELETE'});
-        loadEmployers();
-      }));
-
-      const allRequests = [];
-      employers.forEach(e => e.hiringRequests.forEach(r => allRequests.push({...r, company: e.company || e.name})));
-      const htbody = $('#hiringTable tbody');
-      if(!allRequests.length){ htbody.innerHTML = `<tr><td colspan="6" class="empty-state">No hiring requests yet.</td></tr>`; return; }
-      htbody.innerHTML = allRequests.slice().reverse().map(r => `
-        <tr>
-          <td>${r.company}</td><td>${r.department}</td><td>${r.roleTitle || '—'}</td>
-          <td>${r.openings}</td><td>${r.matches.length} matched</td><td>${new Date(r.createdAt).toLocaleDateString()}</td>
-        </tr>`).join('');
-    } catch(e){ toast(e.message, 'error'); }
+  function renderScopeNote() {
+    const el = $('#whoScope');
+    if (!ME.courseIds || !ME.courseIds.length) { el.innerHTML = ''; return; }
+    const names = ME.courseIds.map(id => (CACHE.courses || []).find(c => c.id === id))
+      .filter(Boolean).map(c => c.name);
+    el.innerHTML = names.length
+      ? `<span class="pill info" title="You only see records on these courses">🔒 ${esc(names.join(', '))}</span>`
+      : '';
   }
 
-  $('#addEmployerBtn').addEventListener('click', async ()=>{
-    const values = await openModal('Add Employer', [
-      {key:'name', label:'Contact name'}, {key:'company', label:'Company'},
-      {key:'email', label:'Email'}, {key:'password', label:'Password'}
-    ]);
-    if(!values) return;
-    try{
-      await api('/admin/employers', {method:'POST', body:values});
-      toast('Employer added.', 'success');
-      loadEmployers();
-    } catch(e){ toast(e.message, 'error'); }
-  });
+  /* ---------------------------------------------------------- NAVIGATION */
 
-  // ======================================================
-  // SETTINGS
-  // ======================================================
-  $('#changePassBtn').addEventListener('click', async ()=>{
-    const currentPassword = $('#s-current-pass').value;
-    const newPassword = $('#s-new-pass').value;
-    const msg = $('#settingsMsg');
-    try{
-      await api('/admin/change-password', {method:'PUT', body:{currentPassword, newPassword}});
-      msg.style.color = 'var(--green)';
-      msg.textContent = 'Password updated.';
-      msg.classList.add('show');
-      $('#s-current-pass').value = ''; $('#s-new-pass').value = '';
-    } catch(e){
-      msg.style.color = 'var(--red)';
-      msg.textContent = e.message;
-      msg.classList.add('show');
+  const loaders = {};   // modules.js registers panel loaders here
+
+  function selectPanel(name) {
+    const item = $(`.nav-item[data-panel="${name}"]`);
+    if (!item || item.classList.contains('locked')) return;
+    $$('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    $$('.panel').forEach(p => p.classList.remove('active'));
+    const panel = $('#panel-' + name);
+    if (panel) panel.classList.add('active');
+    $('#sidebar').classList.remove('open');
+    window.scrollTo(0, 0);
+    if (loaders[name]) {
+      Promise.resolve(loaders[name]()).catch(e => toast(e.message, 'error'));
+    }
+  }
+
+  $$('.nav-item').forEach(item =>
+    item.addEventListener('click', () => selectPanel(item.dataset.panel)));
+  $('#menuToggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+  // Generic tab strips (used by Coursework, Placement, Audit, Settings).
+  document.addEventListener('click', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    const strip = tab.parentElement;
+    strip.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const scope = strip.parentElement;
+    scope.querySelectorAll(':scope > .tab-panel').forEach(p =>
+      p.classList.toggle('active', p.dataset.tabpanel === tab.dataset.tab));
+    if (strip.dataset.tabs && loaders['tab:' + strip.dataset.tabs]) {
+      loaders['tab:' + strip.dataset.tabs](tab.dataset.tab);
     }
   });
 
+  /* ------------------------------------------------------ shared lookups */
+
+  async function loadLookups(force) {
+    if (CACHE.loaded && !force) return CACHE;
+    CACHE.courses = can('courses.read') ? await api('/admin/academics/courses').catch(() => []) : [];
+    CACHE.batches = can('batches.read') ? await api('/admin/academics/batches').catch(() => []) : [];
+    CACHE.staff = can('staff.read') ? await api('/admin/staff').catch(() => []) : [];
+    CACHE.students = can('students.read') ? await api('/admin/students').catch(() => []) : [];
+    CACHE.mentors = can('mentors.read') ? await api('/admin/mentors').catch(() => []) : [];
+    CACHE.loaded = true;
+    renderScopeNote();
+    return CACHE;
+  }
+
+  function fillSelect(sel, items, { value = 'id', label = 'name', placeholder } = {}) {
+    const el = typeof sel === 'string' ? $(sel) : sel;
+    if (!el) return;
+    const current = el.value;
+    el.innerHTML = (placeholder !== undefined ? `<option value="">${esc(placeholder)}</option>` : '')
+      + items.map(i => `<option value="${esc(i[value])}">${esc(i[label])}</option>`).join('');
+    if (current) el.value = current;
+  }
+
+  /* --------------------------------------------------- NOTIFICATIONS */
+
+  let pollTimer = null;
+  let lastSeenIds = new Set();
+
+  async function refreshNotifications(silent) {
+    if (!TOKEN) return;
+    try {
+      const data = await api('/notifications?limit=60');
+      const count = data.unread;
+      [['#bellCount', count], ['#bellCountMobile', count]].forEach(([sel, n]) => {
+        const el = $(sel);
+        if (!el) return;
+        el.textContent = n > 99 ? '99+' : n;
+        el.classList.toggle('show', n > 0);
+      });
+
+      $('#notifList').innerHTML = data.items.length ? data.items.map(n => `
+        <div class="notif-item ${n.read ? '' : 'unread'}" data-notif="${esc(n.id)}" ${n.link ? `data-link="${esc(n.link)}"` : ''}>
+          <span class="ico">${esc(n.icon)}</span>
+          <div style="flex:1;">
+            <b>${esc(n.title)}</b>
+            <small>${esc(n.body)}</small>
+            <div class="when">${esc(timeAgo(n.createdAt))}</div>
+          </div>
+        </div>`).join('') : '<div class="empty-state">Nothing yet.</div>';
+
+      // Only foreground-toast things that arrived while the page was open,
+      // otherwise every reload would replay the whole backlog.
+      if (!silent) {
+        data.items.filter(n => !n.read && !lastSeenIds.has(n.id)).slice(0, 3).forEach(n => {
+          toast(`${n.icon} ${n.title} — ${n.body}`.slice(0, 150));
+        });
+      }
+      lastSeenIds = new Set(data.items.map(n => n.id));
+
+      updateBadges();
+    } catch (e) { /* a failed poll shouldn't interrupt anything */ }
+  }
+
+  async function updateBadges() {
+    if (!can('queries.read') && !can('disputes.read') && !can('forms.read')) return;
+    try {
+      const s = await api('/admin/support/summary');
+      const set = (sel, n) => {
+        const el = $(sel);
+        if (!el) return;
+        el.textContent = n;
+        el.style.display = n > 0 ? '' : 'none';
+      };
+      set('#badgeQueries', s.queriesOpen);
+      set('#badgeDisputes', s.disputesOpen);
+      set('#badgeForms', s.formsNew);
+    } catch (e) { /* non-critical */ }
+  }
+
+  function startPolling() {
+    stopPolling();
+    refreshNotifications(true);
+    pollTimer = setInterval(refreshNotifications, 25000);
+  }
+  function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+  const drawer = $('#notifDrawer');
+  const openDrawer = () => { drawer.classList.add('open'); refreshNotifications(true); };
+  $('#bell').addEventListener('click', openDrawer);
+  const bellM = $('#bellMobile');
+  if (bellM) bellM.addEventListener('click', openDrawer);
+  $('#closeNotif').addEventListener('click', () => drawer.classList.remove('open'));
+
+  $('#notifList').addEventListener('click', async e => {
+    const item = e.target.closest('[data-notif]');
+    if (!item) return;
+    await api('/notifications/read', { method: 'POST', body: { ids: [item.dataset.notif] } });
+    item.classList.remove('unread');
+    refreshNotifications(true);
+    const link = item.dataset.link;
+    if (link && link.startsWith('#')) {
+      const panel = link.slice(1).split('/')[0];
+      const map = { finance: 'finance', students: 'students', mentors: 'mentors', employers: 'employers',
+        leads: 'leads', forms: 'forms', queries: 'queries', disputes: 'disputes', repository: 'repository',
+        placement: 'placement', classes: 'classes', webinar: 'webinar' };
+      if (map[panel]) { drawer.classList.remove('open'); selectPanel(map[panel]); }
+    }
+  });
+
+  $('#markAllRead').addEventListener('click', async () => {
+    await api('/notifications/read', { method: 'POST', body: {} });
+    refreshNotifications(true);
+  });
+
+  $('#broadcastBtn').addEventListener('click', async () => {
+    if (!can('notifications.broadcast')) return toast('Your role cannot send broadcasts.', 'error');
+    const roles = [
+      { value: 'student', label: 'All students' }, { value: 'mentor', label: 'All mentors' },
+      { value: 'employer', label: 'All employers' }, { value: 'super_admin', label: 'Super Admins' },
+      { value: 'admissions_manager', label: 'Admissions Managers' }, { value: 'counsellor', label: 'Counsellors' },
+      { value: 'academic_manager', label: 'Academic Managers' }, { value: 'trainer', label: 'Trainers' },
+      { value: 'placement_manager', label: 'Placement Managers' }, { value: 'finance', label: 'Finance' },
+      { value: 'content_manager', label: 'Content Managers' }
+    ];
+    const v = await openModal('Send a Broadcast', [
+      { key: 'title', label: 'Title' },
+      { key: 'body', label: 'Message', type: 'textarea' },
+      { key: 'everyone', label: 'Send to absolutely everyone', type: 'checkbox' },
+      { key: 'roles', label: 'Or pick specific groups', type: 'multiselect', options: roles }
+    ], {}, {
+      subtitle: 'Goes to the in-app bell and, for anyone who allowed it, as a push notification.',
+      saveLabel: 'Send',
+      validate: val => !val.title || !val.body ? 'A title and a message are both required.' : null
+    });
+    if (!v) return;
+    try {
+      await api('/notifications/broadcast', { method: 'POST', body: v });
+      toast('Broadcast sent.', 'success');
+      refreshNotifications(true);
+    } catch (e) { toast(e.message, 'error'); }
+  });
+
+  /* ---------------------------------------------------------- WEB PUSH */
+
+  const b64ToUint8 = base64 => {
+    const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(padded);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  };
+
+  async function pushState() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return { supported: false, reason: 'This browser does not support push notifications.' };
+    }
+    const info = await api('/notifications/vapid-key').catch(() => ({ available: false }));
+    if (!info.available) return { supported: false, reason: info.reason || 'Push is switched off in Settings → Notifications.' };
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    return { supported: true, permission: Notification.permission, subscribed: !!sub, publicKey: info.publicKey };
+  }
+
+  async function enablePush() {
+    try {
+      const state = await pushState();
+      if (!state.supported) return toast(state.reason, 'error');
+
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return toast('Notifications were blocked. Allow them in your browser settings to receive alerts.', 'error');
+
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: b64ToUint8(state.publicKey)
+        });
+      }
+      await api('/notifications/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+      toast('Push notifications are on for this device.', 'success');
+      $('#enablePushBtn').style.display = 'none';
+      renderPushStatus();
+    } catch (e) {
+      toast('Could not enable push: ' + e.message, 'error');
+    }
+  }
+
+  async function renderPushStatus() {
+    const el = $('#pushStatusText');
+    if (!el) return;
+    const state = await pushState();
+    if (!state.supported) { el.textContent = state.reason; return; }
+    el.textContent = state.subscribed
+      ? 'This device is subscribed. You will get alerts even when the tab is closed.'
+      : `Not subscribed on this device (browser permission: ${state.permission}).`;
+  }
+
+  $('#enablePushBtn').addEventListener('click', enablePush);
+  $('#pushEnableBtn').addEventListener('click', enablePush);
+  $('#pushTestBtn').addEventListener('click', async () => {
+    try {
+      const r = await api('/notifications/test', { method: 'POST' });
+      toast(r.subscribedDevices ? `Test sent to ${r.subscribedDevices} device(s).` : 'Sent to your bell — no push devices subscribed yet.', 'success');
+      refreshNotifications(true);
+    } catch (e) { toast(e.message, 'error'); }
+  });
+
+  async function offerPush() {
+    const state = await pushState();
+    if (state.supported && !state.subscribed && state.permission !== 'denied') {
+      $('#enablePushBtn').style.display = '';
+    }
+  }
+
+  /* ------------------------------------------------------- STUDENT DRAWER */
+
+  const sd = $('#studentDrawer');
+  $('#closeStudentDrawer').addEventListener('click', () => sd.classList.remove('open'));
+
+  function openStudentDrawer(id) {
+    sd.classList.add('open');
+    $('#sdBody').innerHTML = '<div class="loading"><span class="spinner"></span> Loading the full record…</div>';
+    if (loaders.studentProfile) loaders.studentProfile(id);
+  }
+
+  /* ------------------------------------------------------------ bootstrap */
+
+  async function bootstrap() {
+    await loadLookups(true);
+    startPolling();
+    offerPush();
+    renderPushStatus();
+    const active = $('.nav-item.active');
+    if (active && loaders[active.dataset.panel]) {
+      Promise.resolve(loaders[active.dataset.panel]()).catch(e => toast(e.message, 'error'));
+    }
+  }
+
+  /* ------------------------------------------------ exported to modules.js */
+
+  window.BM = {
+    api, authFetch, toast, esc, fmtDate, fmtDateTime, money, lakh, timeAgo, titleCase,
+    openModal, openSheet, confirmDialog, empty, fillSelect,
+    can, loadLookups, selectPanel, openStudentDrawer,
+    refreshNotifications, renderPushStatus,
+    loaders,
+    get me() { return ME; },
+    get cache() { return CACHE; },
+    $, $$
+  };
 })();
